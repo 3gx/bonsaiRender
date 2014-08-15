@@ -3,11 +3,13 @@ CC  = mpicc
 LD  = mpicxx
 F90  = mpif90
 
-CUDA_TK  = /usr/local/cuda
+CUDA_TK  = /usr/local/cuda-5.5
+#CUDA_TK  = /usr/local/cuda
 # CUDA_TK = $(HOME)/usr/local/cuda-5.5
 CXXFLAGS = -Wall -fopenmp -std=c++11
 CXXFLAGS += -Wno-reorder
 CXXFLAGS += -Wno-write-strings
+CXXFLAGS += -DMPICH_IGNORE_CXX_SEEK  -DMPICH_SKIP_MPICXX
 CFLAGS =  -Wall
 
 OPT += -O3 -g
@@ -25,10 +27,15 @@ ENGINE=density
 #ENGINE=splotch
 
 
-INCLUDE_FLAGS= -I./ -I./$(ENGINE)/
+INCLUDE_FLAGS= -I./ -I./$(ENGINE)/ -I/export/scratch1/jbedorf/Bonsai/runtime/include/
+#INCLUDE_FLAGS= -I./ -I./$(ENGINE)/
 INCLUDE_FLAGS += -I$(CUDA_TK)/include 
-LDFLAGS = -lGL -lGLU -lglut -lGLEW -fopenmp
+INCLUDE_FLAGS += -I/export/scratch1/jbedorf/standAloneSCDemo/IceT-2-1-1/src/include/
+#LDFLAGS = -lGL -lGLU -lglut -lGLEW -fopenmp
 #-L$(PWD)/lib/linux -lGLEW_x86_64
+LDFLAGS = -L./ -L/usr/lib64/ -lGL -lGLU -lglut -fopenmp -lGLEW 
+LDFLAGS += -L/export/scratch1/jbedorf/standAloneSCDemo/IceT-2-1-1/lib/ -lIceTCore -lIceTGL  -lIceTMPI
+
 
 ifeq ($(APPLEOSX),1)
 	INCLUDE_FLAGS += -I/opt/local/include

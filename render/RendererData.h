@@ -47,8 +47,13 @@ class RendererData
     float _xmin, _ymin, _zmin, _rmin;
     float _xmax, _ymax, _zmax, _rmax;
 
+    float _globalMin;
+    float _globalMax;
+    
     float _attributeMin[NPROP];
     float _attributeMax[NPROP];
+    
+    
 
   public:
     RendererData(const int __n) : _n(__n)
@@ -145,6 +150,12 @@ class RendererData
     float ymax() const { return _ymax;} 
     float zmax() const { return _zmax;} 
     float rmax() const { return _rmax;} 
+    
+    float globalMin() const {return _globalMin;}
+    float globalMax() const {return _globalMax;}
+
+    void set_globalMin(float _min) {_globalMin = _min;}
+    void set_globalMax(float _max) {_globalMax = _max;}    
 
     float attributeMin(const Attribute_t p) const { return _attributeMin[p]; }
     float attributeMax(const Attribute_t p) const { return _attributeMax[p]; }
