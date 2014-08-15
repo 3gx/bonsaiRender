@@ -50,6 +50,14 @@ static inline double rtc(void)
 
 #include "tr.h"
 
+
+#include <IceT.h>
+#include <IceTGL.h>
+#include <IceTMPI.h>
+
+#define WINDOW_SIZE_X 1024
+#define WINDOW_SIZE_Y 768
+
 float TstartGlow;
 float dTstartGlow;
 
@@ -501,8 +509,10 @@ class Demo
       glDisable(GL_BLEND);
       endWinCoords();
 
+      IceTInt rank;
+      icetGetIntegerv(ICET_RANK, &rank);
       char str[256];
-      sprintf(str, "N-Body Renderer (%d bodies): %0.1f fps", bodies, fps);
+      sprintf(str, "N-Body Renderer (%d bodies) \tMode: %d\tRank: %d\t%0.1f fps", bodies, m_displayMode, rank, fps);
 
       glutSetWindowTitle(str);
     }
@@ -627,6 +637,24 @@ class Demo
         m_cameraTransLag = m_cameraTrans;
         m_cameraRotLag = m_cameraRot;
 #endif
+        
+     float cameraTemp[7] = {m_cameraTransLag.x, m_cameraTransLag.y, m_cameraTransLag.z, 
+                            m_cameraRotLag.x,   m_cameraRotLag.y,   m_cameraRotLag.z,
+                            m_cameraRoll
+    };
+                        
+     MPI_Bcast(cameraTemp, 7, MPI_FLOAT, 0, MPI_COMM_WORLD);
+     
+     m_cameraTransLag.x = cameraTemp[0]; 
+     m_cameraTransLag.y = cameraTemp[1];
+     m_cameraTransLag.z = cameraTemp[2];
+     m_cameraRotLag.x   = cameraTemp[3];
+     m_cameraRotLag.y   = cameraTemp[4];
+     m_cameraRotLag.z   = cameraTemp[5];
+     m_cameraRoll       = cameraTemp[6];
+             
+        
+        
 
         //Stereo setup +  get the left and right projection matrices and store it sv
         float frustumShift = 0.0;
@@ -1561,7 +1589,7 @@ void display()
   theDemo->display();
 
   //glutReportErrors();
-  glutSwapBuffers();
+  //glutSwapBuffers();
 
   fpsCount++;
 
@@ -1833,7 +1861,8 @@ void initGL(int argc, char** argv, const char *fullScreenMode, const bool stereo
     glutInitDisplayMode(GLUT_RGBA | GLUT_DEPTH | GLUT_STEREO |GLUT_DOUBLE);
   }
   else
-    glutInitDisplayMode(GLUT_RGBA | GLUT_DEPTH | GLUT_DOUBLE);
+    //glutInitDisplayMode(GLUT_RGBA | GLUT_DEPTH | GLUT_DOUBLE);
+    glutInitDisplayMode(GLUT_RGBA | GLUT_DEPTH | GLUT_DOUBLE | GLUT_ALPHA);
 
   if (fullScreenMode[0]) {
     printf("fullScreenMode: %s\n", fullScreenMode);
@@ -1848,8 +1877,15 @@ void initGL(int argc, char** argv, const char *fullScreenMode, const bool stereo
     }
 #endif
   } else {
-    glutInitWindowSize(1024, 768);
-    glutCreateWindow("Bonsai Tree-code Gravitational N-body Simulation");
+//     glutInitWindowSize(1024, 768);
+//     glutCreateWindow("Bonsai Tree-code Gravitational N-body Simulation");
+    glutInitWindowSize(WINDOW_SIZE_X, WINDOW_SIZE_Y);
+    
+    IceTInt rank, nProc;
+    icetGetIntegerv(ICET_RANK, &rank);
+    char buff[512];
+    sprintf(buff,"Bonsai Tree-code Gravitational N-body Simulation - rank: %d", rank);
+    glutCreateWindow(buff);    
   }
 
   //Make sure we got stereo if we asked for it, this must happen after glutCreateWindow
@@ -1863,14 +1899,16 @@ void initGL(int argc, char** argv, const char *fullScreenMode, const bool stereo
     ::exit(-1);
   }
 
-  glutDisplayFunc(display);
+  
   glutReshapeFunc(reshape);
   glutMouseFunc(mouse);
   glutMotionFunc(motion);
   glutKeyboardFunc(key);
   glutKeyboardUpFunc(keyUp);
   glutSpecialFunc(special);
-  glutIdleFunc(idle);
+  
+//   glutDisplayFunc(display);
+//   glutIdleFunc(idle);
 
   glutIgnoreKeyRepeat(GL_TRUE);
 
@@ -1913,6 +1951,54 @@ void initGL(int argc, char** argv, const char *fullScreenMode, const bool stereo
 }
 
 
+void initIceT()
+{
+  IceTInt rank, nProc;
+  icetGetIntegerv(ICET_RANK, &rank);
+  icetGetIntegerv(ICET_NUM_PROCESSES, &nProc);
+  
+  glClearColor(0.0, 0.0, 0.0, 1.0);
+
+  icetGLDrawCallback(display); //Calls our display func
+
+  //Set the bounding box, xmin,xmax,ymin,ymax,zmin,zmax
+  icetBoundingBoxf(theDemo->m_idata.globalMin(), 
+                   theDemo->m_idata.globalMax(), 
+                   theDemo->m_idata.globalMin(), 
+                   theDemo->m_idata.globalMax(), 
+                   theDemo->m_idata.globalMin(), 
+                   theDemo->m_idata.globalMax());
+
+  //Setup a single tile
+  icetResetTiles();
+  icetAddTile(0, 0, WINDOW_SIZE_X, WINDOW_SIZE_Y, 0);
+
+  //icetStrategy(ICET_STRATEGY_REDUCE);
+  icetStrategy(ICET_STRATEGY_SEQUENTIAL);
+ 
+#if 1
+  //Use the below if we use Volume rendering
+  //TODO figure out why we get artifacts
+  icetCompositeMode(ICET_COMPOSITE_MODE_BLEND);
+  icetSetColorFormat(ICET_IMAGE_COLOR_RGBA_UBYTE);
+  icetSetDepthFormat(ICET_IMAGE_DEPTH_NONE);
+  
+//   icetEnable(ICET_ORDERED_COMPOSITE);
+//   int order[] = {1,0};
+//   icetCompositeOrder(order);
+#endif
+  //Setup the projection matrix
+}
+
+
+void DoFrame()
+{
+  icetGLDrawFrame();
+  
+  glutSwapBuffers();
+  
+}
+
 void initAppRenderer(int argc, char** argv, 
     RendererData &idata,
     const char *fullScreenMode,
@@ -1923,5 +2009,30 @@ void initAppRenderer(int argc, char** argv,
   theDemo = new Demo(idata);
   if (stereo)
     theDemo->toggleStereo(); //SV assuming stereo is set to disable by default.
+//   glutMainLoop();
+}
+
+void initAppRenderer_start()
+{
+  glutDisplayFunc(initIceT);
+  glutIdleFunc(DoFrame);
+
+  
+  
   glutMainLoop();
 }
+
+// void initAppRenderer(int argc, char** argv, 
+//     RendererData &idata,
+//     const char *fullScreenMode,
+//     const bool stereo)
+// {
+//   assert(idata.n() <= MAX_PARTICLES);
+//   initGL(argc, argv, fullScreenMode, stereo);
+//   theDemo = new Demo(idata);
+//   if (stereo)
+//     theDemo->toggleStereo(); //SV assuming stereo is set to disable by default.
+//   glutMainLoop();
+// }
+
+
