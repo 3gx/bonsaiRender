@@ -16,6 +16,11 @@
 #include "renderloop.h"
 #include "anyoption.h"
 #include "RendererData.h"
+
+
+#include <IceT.h>
+#include <IceTGL.h>
+#include <IceTMPI.h>
   
 static RendererData* readBonsaiReduced(
     const int rank, const int nranks, const MPI_Comm &comm,
@@ -265,8 +270,8 @@ int main(int argc, char * argv[])
   MPI_Comm_size(comm, &nranks);
   MPI_Comm_rank(comm, &rank);
 
-  assert(nranks == 1);
-  assert(rank   == 0);
+  //assert(nranks == 1);
+  //assert(rank   == 0);
 
   std::string fileName;
 #ifdef OLDIO
@@ -280,7 +285,8 @@ int main(int argc, char * argv[])
 #endif
 
 
-  if (rank == 0)  
+  //if (rank == 0)  
+  if(1)
   {
 		AnyOption opt;
 
@@ -434,12 +440,44 @@ int main(int argc, char * argv[])
 //  rDataPtr->clamp(RendererData::VEL, 0.25, 0.25);
 //  rDataPtr->scaleExp(RendererData::VEL);
   
+  //Compute bounds
+  rDataPtr->computeMinMax();
+  
+  
+  float lMin = rDataPtr->rmin();
+  float lMax = rDataPtr->rmax();
+  float gMin = 0;
+  float gMax = 0;
+  
+  MPI_Allreduce(&lMin, &gMin, 1, MPI_FLOAT, MPI_MIN, comm);
+  MPI_Allreduce(&lMax, &gMax, 1, MPI_FLOAT, MPI_MAX, comm);
+  
+  fprintf(stderr,"Dimensions: %f %f %f %f\n", lMin, lMax, gMin, gMax);
+  
+  rDataPtr->set_globalMin(gMin);
+  rDataPtr->set_globalMax(gMax);  
+  
+  //Setup the IceT context and communicators
+  IceTCommunicator icetComm    = icetCreateMPICommunicator(MPI_COMM_WORLD);
+  IceTContext      icetContext = icetCreateContext(icetComm);
+  icetDestroyMPICommunicator(icetComm); //Save since the comm is copied to the icetContext
+  
+  
 
   initAppRenderer(argc, argv, *rDataPtr
 #ifndef PARTICLESRENDERER
       ,fullScreenMode.c_str(), stereo
 #endif
       );
+  
+  icetGLInitialize();
+  
+
+  //Start the visualization
+  initAppRenderer_start();
+  
+    
+    
 
   fprintf(stderr, " -- Done -- \n");
   while(1) {}
