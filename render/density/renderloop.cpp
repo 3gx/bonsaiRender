@@ -1,3 +1,4 @@
+#include <IceTMPI.h>
 #include <stdio.h>
 #include "renderloop.h"
 
@@ -53,7 +54,6 @@ static inline double rtc(void)
 
 #include <IceT.h>
 #include <IceTGL.h>
-#include <IceTMPI.h>
 
 #define WINDOW_SIZE_X 1024
 #define WINDOW_SIZE_Y 768
